@@ -1,23 +1,30 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Firehouse Rotation - Goessel/Newton</title>
+    <title>Firehouse Truck Rotation - Goessel/Newton</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f4; }
         h1 { color: #d32f2f; }
         .assignment { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         button { background: #d32f2f; color: white; padding: 12px 20px; border: none; border-radius: 6px; font-size: 16px; margin: 10px 5px; }
         button:hover { background: #b71c1c; }
+        .crew-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 15px 0; }
+        .crew-item { background: white; padding: 10px; border-radius: 6px; display: flex; align-items: center; }
+        .crew-item input { margin-right: 10px; }
         .history { margin-top: 30px; }
-        .crew { font-size: 14px; color: #555; }
     </style>
 </head>
 <body>
     <h1>Firehouse Truck Rotation</h1>
     <p><strong>Crew:</strong> Kevin Finley, Joshua Strotkamp, Trevor Yoder, Duaine Helms, Daniel Dennett, Dalton Beckett, Capt. Wald (no truck)</p>
-    
+
+    <div class="assignment">
+        <h2>Who's Here Today?</h2>
+        <div id="crew-list" class="crew-list"></div>
+    </div>
+
     <div id="current" class="assignment">
         <h2>Current Shift Assignments</h2>
         <div id="assignments"></div>
@@ -33,11 +40,12 @@
 
     <script>
         const trucks = ["Medic 2", "Engine 2", "AP1", "Squad2/Tender2"];
-        const crew = ["Kevin Finley", "Joshua Strotkamp", "Trevor Yoder", "Duaine Helms", "Daniel Dennett", "Dalton Beckett"];
-        // Captain Wald is in roster but skips assignments
+        const fullCrew = ["Kevin Finley", "Joshua Strotkamp", "Trevor Yoder", "Duaine Helms", "Daniel Dennett", "Dalton Beckett"];
+        // Captain Wald always skipped
 
         let currentAssignments = {};
         let history = [];
+        let availability = {}; // will store true/false for each crew member
 
         function loadData() {
             const saved = localStorage.getItem('firehouseRotation');
@@ -45,15 +53,42 @@
                 const data = JSON.parse(saved);
                 currentAssignments = data.current || {};
                 history = data.history || [];
+                availability = data.availability || {};
             }
+            // Default everyone available if first time
+            fullCrew.forEach(guy => {
+                if (availability[guy] === undefined) availability[guy] = true;
+            });
+            renderCrewList();
             render();
         }
 
         function saveData() {
             localStorage.setItem('firehouseRotation', JSON.stringify({
                 current: currentAssignments,
-                history: history
+                history: history,
+                availability: availability
             }));
+        }
+
+        function renderCrewList() {
+            const div = document.getElementById('crew-list');
+            div.innerHTML = '';
+            fullCrew.forEach(guy => {
+                const checked = availability[guy] ? 'checked' : '';
+                const item = document.createElement('div');
+                item.className = 'crew-item';
+                item.innerHTML = `
+                    <input type="checkbox" ${checked} onchange="toggleAvailability('${guy}', this.checked)">
+                    <span>${guy}</span>
+                `;
+                div.appendChild(item);
+            });
+        }
+
+        function toggleAvailability(guy, isHere) {
+            availability[guy] = isHere;
+            saveData();
         }
 
         function render() {
@@ -61,15 +96,14 @@
             assignDiv.innerHTML = '';
             
             if (Object.keys(currentAssignments).length === 0) {
-                assignDiv.innerHTML = '<p>No assignments yet. Hit "Generate Next Shift" to start.</p>';
+                assignDiv.innerHTML = '<p>No assignments yet. Set who\'s here and hit "Generate Next Shift".</p>';
             } else {
                 trucks.forEach(truck => {
-                    const guy = currentAssignments[truck] || 'Open';
+                    const guy = currentAssignments[truck] || '—';
                     const p = document.createElement('p');
                     p.innerHTML = `<strong>${truck}:</strong> ${guy}`;
                     assignDiv.appendChild(p);
                 });
-                // Gib overflow
                 const gibGuy = currentAssignments['Gib'] || 'None';
                 const gibP = document.createElement('p');
                 gibP.innerHTML = `<strong>Gib (Guy in Back):</strong> ${gibGuy}`;
@@ -82,47 +116,60 @@
             history.slice().reverse().forEach((entry, i) => {
                 const div = document.createElement('div');
                 div.className = 'assignment';
-                div.innerHTML = `<strong>Shift ${history.length - i}:</strong><br>` +
-                    trucks.map(t => `${t}: ${entry[t] || '—'}`).join('<br>') +
-                    `<br>Gib: ${entry['Gib'] || '—'}`;
+                let html = `<strong>Shift ${history.length - i}:</strong><br>`;
+                trucks.forEach(t => {
+                    html += `${t}: ${entry[t] || '—'}<br>`;
+                });
+                html += `Gib: ${entry['Gib'] || '—'}`;
+                div.innerHTML = html;
                 histDiv.appendChild(div);
             });
         }
 
         function generateNextShift() {
-            // Simple fair rotation: cycle the crew through the positions
-            // Keep last assignments and shift everyone "forward"
-            let lastPositions = Object.values(currentAssignments);
-            let available = crew.filter(guy => !lastPositions.includes(guy)); // rough fairness
-
-            // Better cycling: rotate the order
-            if (Object.keys(currentAssignments).length === 0) {
-                // First run - assign in order
-                currentAssignments = {};
-                trucks.forEach((truck, i) => {
-                    currentAssignments[truck] = crew[i % crew.length];
-                });
-                currentAssignments['Gib'] = crew[4] || 'None'; // extra guy to Gib
-            } else {
-                // Rotate: each person moves to the next truck, last goes to Gib, Gib moves in
-                let newAssign = {};
-                let prevGuys = [...trucks.map(t => currentAssignments[t]), currentAssignments['Gib'] || null].filter(Boolean);
-                
-                // Shift the list left (rotate)
-                let rotated = prevGuys.slice(1).concat(prevGuys[0]);
-                
-                trucks.forEach((truck, i) => {
-                    newAssign[truck] = rotated[i] || 'Open';
-                });
-                newAssign['Gib'] = rotated[4] || 'None';
-                
-                // Add to history before updating
-                history.push({...currentAssignments});
-                if (history.length > 20) history.shift(); // keep last 20 only
-                
-                currentAssignments = newAssign;
+            const hereToday = fullCrew.filter(guy => availability[guy]);
+            if (hereToday.length < 4) {
+                alert("Need at least 4 guys here for the 4 trucks + Gib. Check who's available.");
+                return;
             }
 
+            let newAssign = {};
+
+            if (Object.keys(currentAssignments).length === 0) {
+                // First run - assign in order to available guys
+                hereToday.forEach((guy, i) => {
+                    if (i < 4) newAssign[trucks[i]] = guy;
+                });
+                if (hereToday.length > 4) newAssign['Gib'] = hereToday[4];
+            } else {
+                // Get the previous order of assigned people (trucks + Gib)
+                let prevOrder = trucks.map(t => currentAssignments[t]).filter(Boolean);
+                if (currentAssignments['Gib']) prevOrder.push(currentAssignments['Gib']);
+
+                // Filter previous order to only those still here today, keep their relative order
+                let stillHereFromLast = prevOrder.filter(guy => hereToday.includes(guy));
+
+                // Add any new guys who weren't in last shift (at the end)
+                let newGuys = hereToday.filter(guy => !stillHereFromLast.includes(guy));
+                let workingOrder = stillHereFromLast.concat(newGuys);
+
+                // Now rotate: move everyone one spot forward, first person goes to Gib or end
+                let rotated = workingOrder.slice(1).concat(workingOrder[0]);
+
+                // Assign to trucks + Gib
+                trucks.forEach((truck, i) => {
+                    newAssign[truck] = rotated[i] || '—';
+                });
+                newAssign['Gib'] = rotated[4] || 'None';
+            }
+
+            // Save old to history
+            if (Object.keys(currentAssignments).length > 0) {
+                history.push({...currentAssignments});
+                if (history.length > 20) history.shift();
+            }
+
+            currentAssignments = newAssign;
             saveData();
             render();
         }
@@ -132,11 +179,11 @@
                 localStorage.removeItem('firehouseRotation');
                 currentAssignments = {};
                 history = [];
-                render();
+                availability = {};
+                loadData();
             }
         }
 
-        // Load on start
         window.onload = loadData;
     </script>
 </body>

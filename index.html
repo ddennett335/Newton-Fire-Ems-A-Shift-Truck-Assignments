@@ -14,11 +14,12 @@
         .crew-item { background: white; padding: 10px; border-radius: 6px; display: flex; align-items: center; }
         .crew-item input { margin-right: 10px; }
         .history { margin-top: 30px; }
+        .date { font-weight: bold; color: #333; }
     </style>
 </head>
 <body>
     <h1>Firehouse Truck Rotation</h1>
-    <p><strong>Crew:</strong> Kevin Finley, Joshua Strotkamp, Trevor Yoder, Duaine Helms, Daniel Dennett, Dalton Beckett, Capt. Wald (no truck)</p>
+    <p><strong>Crew:</strong> Kevin Finley, Joshua Strotkamp, Trevor Yoder, Duaine Helms, Daniel Dennett, Dalton Beckett, Jordan Boston, Capt. Wald (no truck)</p>
 
     <div class="assignment">
         <h2>Who's Here Today?</h2>
@@ -26,7 +27,7 @@
     </div>
 
     <div id="current" class="assignment">
-        <h2>Current Shift Assignments</h2>
+        <h2 id="current-date" class="date"></h2>
         <div id="assignments"></div>
     </div>
 
@@ -40,12 +41,11 @@
 
     <script>
         const trucks = ["Medic 2", "Engine 2", "AP1", "Squad2/Tender2"];
-        const fullCrew = ["Kevin Finley", "Joshua Strotkamp", "Trevor Yoder", "Duaine Helms", "Daniel Dennett", "Dalton Beckett"];
-        // Captain Wald always skipped
-
+        const fullCrew = ["Kevin Finley", "Joshua Strotkamp", "Trevor Yoder", "Duaine Helms", "Daniel Dennett", "Dalton Beckett", "Jordan Boston"];
+        
         let currentAssignments = {};
         let history = [];
-        let availability = {}; // will store true/false for each crew member
+        let availability = {};
 
         function loadData() {
             const saved = localStorage.getItem('firehouseRotation');
@@ -55,7 +55,6 @@
                 history = data.history || [];
                 availability = data.availability || {};
             }
-            // Default everyone available if first time
             fullCrew.forEach(guy => {
                 if (availability[guy] === undefined) availability[guy] = true;
             });
@@ -91,82 +90,98 @@
             saveData();
         }
 
+        function getToday() {
+            const now = new Date();
+            return now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+        }
+
         function render() {
+            const dateEl = document.getElementById('current-date');
+            dateEl.textContent = currentAssignments.date ? 'Date: ' + currentAssignments.date : 'No shift yet';
+
             const assignDiv = document.getElementById('assignments');
             assignDiv.innerHTML = '';
             
-            if (Object.keys(currentAssignments).length === 0) {
+            if (Object.keys(currentAssignments).length === 0 || !currentAssignments.date) {
                 assignDiv.innerHTML = '<p>No assignments yet. Set who\'s here and hit "Generate Next Shift".</p>';
-            } else {
-                trucks.forEach(truck => {
-                    const guy = currentAssignments[truck] || '—';
-                    const p = document.createElement('p');
-                    p.innerHTML = `<strong>${truck}:</strong> ${guy}`;
-                    assignDiv.appendChild(p);
-                });
-                const gibGuy = currentAssignments['Gib'] || 'None';
-                const gibP = document.createElement('p');
-                gibP.innerHTML = `<strong>Gib (Guy in Back):</strong> ${gibGuy}`;
-                assignDiv.appendChild(gibP);
+                return;
             }
 
-            // History
-            const histDiv = document.getElementById('history');
-            histDiv.innerHTML = '';
-            history.slice().reverse().forEach((entry, i) => {
-                const div = document.createElement('div');
-                div.className = 'assignment';
-                let html = `<strong>Shift ${history.length - i}:</strong><br>`;
-                trucks.forEach(t => {
-                    html += `${t}: ${entry[t] || '—'}<br>`;
-                });
-                html += `Gib: ${entry['Gib'] || '—'}`;
-                div.innerHTML = html;
-                histDiv.appendChild(div);
+            trucks.forEach(truck => {
+                let guy = currentAssignments[truck] || '—';
+                if (truck === "Squad2/Tender2" && currentAssignments.squadDedicated) {
+                    guy += ' - Dedicated Chase';
+                }
+                const p = document.createElement('p');
+                p.innerHTML = `<strong>${truck}:</strong> ${guy}`;
+                assignDiv.appendChild(p);
             });
+
+            const gibGuy = currentAssignments['Gib'] || 'None';
+            const gibP = document.createElement('p');
+            gibP.innerHTML = `<strong>Gib (Guy in Back):</strong> ${gibGuy}`;
+            assignDiv.appendChild(gibP);
         }
 
         function generateNextShift() {
             const hereToday = fullCrew.filter(guy => availability[guy]);
-            if (hereToday.length < 4) {
-                alert("Need at least 4 guys here for the 4 trucks + Gib. Check who's available.");
+            const totalHere = hereToday.length + 1; // + Capt Wald who doesn't take a truck
+
+            let newAssign = { date: getToday() };
+
+            if (hereToday.length === 0) {
+                alert("Nobody marked as here. Check the boxes.");
                 return;
             }
 
-            let newAssign = {};
-
-            if (Object.keys(currentAssignments).length === 0) {
-                // First run - assign in order to available guys
-                hereToday.forEach((guy, i) => {
-                    if (i < 4) newAssign[trucks[i]] = guy;
+            // Build working list and rotate from previous
+            let prevOrder = [];
+            if (Object.keys(currentAssignments).length > 0) {
+                trucks.forEach(t => {
+                    if (currentAssignments[t]) prevOrder.push(currentAssignments[t]);
                 });
-                if (hereToday.length > 4) newAssign['Gib'] = hereToday[4];
-            } else {
-                // Get the previous order of assigned people (trucks + Gib)
-                let prevOrder = trucks.map(t => currentAssignments[t]).filter(Boolean);
                 if (currentAssignments['Gib']) prevOrder.push(currentAssignments['Gib']);
+            }
 
-                // Filter previous order to only those still here today, keep their relative order
-                let stillHereFromLast = prevOrder.filter(guy => hereToday.includes(guy));
+            let stillHereFromLast = prevOrder.filter(guy => hereToday.includes(guy));
+            let newGuys = hereToday.filter(guy => !stillHereFromLast.includes(guy));
+            let workingOrder = stillHereFromLast.concat(newGuys);
 
-                // Add any new guys who weren't in last shift (at the end)
-                let newGuys = hereToday.filter(guy => !stillHereFromLast.includes(guy));
-                let workingOrder = stillHereFromLast.concat(newGuys);
+            // Rotate forward
+            let rotated = workingOrder.length > 0 ? workingOrder.slice(1).concat(workingOrder[0]) : [];
 
-                // Now rotate: move everyone one spot forward, first person goes to Gib or end
-                let rotated = workingOrder.slice(1).concat(workingOrder[0]);
+            // Assign trucks
+            let idx = 0;
+            trucks.forEach(truck => {
+                newAssign[truck] = rotated[idx] || '—';
+                idx++;
+            });
 
-                // Assign to trucks + Gib
-                trucks.forEach((truck, i) => {
-                    newAssign[truck] = rotated[i] || '—';
-                });
+            // Handle short staffing (under 5 regular guys)
+            if (hereToday.length < 5) {
+                // Double up on AP1 + Engine 2 if needed
+                if (hereToday.length === 4) {
+                    newAssign["AP1"] = newAssign["Engine 2"]; // one guy does both
+                }
+                newAssign['Gib'] = 'None';
+                newAssign.squadDedicated = false;
+            } 
+            // Normal or extra staffing (6+ guys)
+            else {
                 newAssign['Gib'] = rotated[4] || 'None';
+                // If 6 or more available, dedicate one to Squad
+                if (hereToday.length >= 6) {
+                    newAssign.squadDedicated = true;
+                    // The Squad guy is already assigned above, we just mark it
+                } else {
+                    newAssign.squadDedicated = false;
+                }
             }
 
             // Save old to history
-            if (Object.keys(currentAssignments).length > 0) {
+            if (Object.keys(currentAssignments).length > 0 && currentAssignments.date) {
                 history.push({...currentAssignments});
-                if (history.length > 20) history.shift();
+                if (history.length > 30) history.shift();
             }
 
             currentAssignments = newAssign;

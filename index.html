@@ -18,7 +18,7 @@
     </style>
 </head>
 <body>
-    <h1>Firehouse Truck Rotation</h1>
+    <h1>Firehouse Truck Rotation - v5 debug</h1>
     <p><strong>Crew:</strong> Kevin Finley, Joshua Strotkamp, Trevor Yoder, Duaine Helms, Daniel Dennett, Dalton Beckett, Jordan Boston, Capt. Wald (no truck)</p>
 
     <div class="assignment">
@@ -121,6 +121,21 @@
             const gibP = document.createElement('p');
             gibP.innerHTML = `<strong>Gib (Guy in Back):</strong> ${gibGuy}`;
             assignDiv.appendChild(gibP);
+
+            // History render (now forced to show even if empty)
+            const histDiv = document.getElementById('history');
+            histDiv.innerHTML = history.length ? '' : '<p>No past shifts yet.</p>';
+            history.slice().reverse().forEach((entry, i) => {
+                const div = document.createElement('div');
+                div.className = 'assignment';
+                let html = `<strong>Shift ${history.length - i} - ${entry.date || '—'}</strong><br>`;
+                trucks.forEach(t => {
+                    html += `${t}: ${entry[t] || '—'}<br>`;
+                });
+                html += `Gib: ${entry['Gib'] || 'None'}`;
+                div.innerHTML = html;
+                histDiv.appendChild(div);
+            });
         }
 
         function generateNextShift() {
@@ -132,7 +147,7 @@
 
             let newAssign = { date: getToday() };
 
-            // Build rotation order from previous
+            // Rotation order
             let prevOrder = [];
             if (currentAssignments.date) {
                 trucks.forEach(t => {
@@ -147,31 +162,35 @@
 
             let rotated = workingOrder.length > 0 ? workingOrder.slice(1).concat(workingOrder[0]) : [];
 
-            // Assign the 4 trucks
+            // Assign trucks
             let idx = 0;
             trucks.forEach(truck => {
                 newAssign[truck] = rotated[idx] || '—';
                 idx++;
             });
 
-            // Short staffing rules
-            if (hereToday.length <= 4) {
+            // === EXPLICIT SHORT STAFFING FIX (exactly 4 guys) ===
+            if (hereToday.length === 4) {
+                newAssign["AP1"] = newAssign["Engine 2"];   // same guy on both
+                newAssign["Squad2/Tender2"] = '—';          // force Squad blank
                 newAssign['Gib'] = 'None';
                 newAssign.squadDedicated = false;
-
-                if (hereToday.length === 4) {
-                    // Force the same guy on both Engine 2 and AP1, Squad blank
-                    newAssign["AP1"] = newAssign["Engine 2"];
-                }
-            } else {
+            } 
+            // 5+ guys
+            else if (hereToday.length >= 5) {
                 newAssign['Gib'] = rotated[4] || 'None';
                 newAssign.squadDedicated = (hereToday.length >= 6);
+            } 
+            // fewer than 4 (extra safe)
+            else {
+                newAssign['Gib'] = 'None';
+                newAssign.squadDedicated = false;
             }
 
-            // ALWAYS save the old shift to history (even same day)
+            // ALWAYS save previous shift to history (even same day)
             if (currentAssignments.date) {
                 history.push({...currentAssignments});
-                if (history.length > 50) history.shift();  // keep more history
+                if (history.length > 50) history.shift();
             }
 
             currentAssignments = newAssign;

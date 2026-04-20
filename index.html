@@ -18,7 +18,7 @@
     </style>
 </head>
 <body>
-    <h1>Firehouse Truck Rotation - v6 explicit</h1>
+    <h1>Firehouse Truck Rotation - v8 locked</h1>
     <p><strong>Crew:</strong> Kevin Finley, Joshua Strotkamp, Trevor Yoder, Duaine Helms, Daniel Dennett, Dalton Beckett, Jordan Boston, Capt. Wald (no truck)</p>
 
     <div class="assignment">
@@ -130,18 +130,24 @@
                 return;
             }
 
+            // SAVE HISTORY FIRST — every single click
+            if (currentAssignments.date) {
+                history.push({...currentAssignments});
+                if (history.length > 50) history.shift();
+            }
+
             let newAssign = { date: getToday() };
 
-            // === 100% EXPLICIT 4-GUY MINIMUM STAFFING ===
-            if (hereToday.length === 4) {
+            // === EXACT 3-GUY MINIMUM (4 total with Capt) ===
+            if (hereToday.length === 3) {
                 newAssign["Medic 2"] = hereToday[0];
                 newAssign["Engine 2"] = hereToday[1];
-                newAssign["AP1"] = hereToday[1];          // DOUBLE on Engine + AP1
-                newAssign["Squad2/Tender2"] = '—';        // blank
+                newAssign["AP1"] = hereToday[1];           // double on Engine + AP1
+                newAssign["Squad2/Tender2"] = hereToday[2]; // guy 3 on Squad/Tender
                 newAssign['Gib'] = 'None';
                 newAssign.squadDedicated = false;
             } 
-            // 5+ guys - normal rotation
+            // 4+ regular guys — full rotation
             else {
                 let prevOrder = [];
                 if (currentAssignments.date) {
@@ -164,12 +170,6 @@
 
                 newAssign['Gib'] = rotated[4] || 'None';
                 newAssign.squadDedicated = (hereToday.length >= 6);
-            }
-
-            // Always save previous to history
-            if (currentAssignments.date) {
-                history.push({...currentAssignments});
-                if (history.length > 50) history.shift();
             }
 
             currentAssignments = newAssign;

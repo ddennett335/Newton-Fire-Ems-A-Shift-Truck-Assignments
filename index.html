@@ -96,11 +96,9 @@
         }
 
         function render() {
-            // Current date
             const dateEl = document.getElementById('current-date');
             dateEl.textContent = currentAssignments.date ? 'Date: ' + currentAssignments.date : 'No shift yet';
 
-            // Current assignments
             const assignDiv = document.getElementById('assignments');
             assignDiv.innerHTML = '';
             
@@ -134,7 +132,7 @@
 
             let newAssign = { date: getToday() };
 
-            // Build rotation order
+            // Build rotation order from previous
             let prevOrder = [];
             if (currentAssignments.date) {
                 trucks.forEach(t => {
@@ -149,34 +147,31 @@
 
             let rotated = workingOrder.length > 0 ? workingOrder.slice(1).concat(workingOrder[0]) : [];
 
-            // Assign trucks in order
+            // Assign the 4 trucks
             let idx = 0;
             trucks.forEach(truck => {
                 newAssign[truck] = rotated[idx] || '—';
                 idx++;
             });
 
-            // Short staffing (4 or fewer regular guys)
+            // Short staffing rules
             if (hereToday.length <= 4) {
                 newAssign['Gib'] = 'None';
                 newAssign.squadDedicated = false;
 
                 if (hereToday.length === 4) {
-                    // One guy covers both Engine 2 and AP1, Squad stays blank
+                    // Force the same guy on both Engine 2 and AP1, Squad blank
                     newAssign["AP1"] = newAssign["Engine 2"];
-                    // Squad2/Tender2 stays as assigned or blank
                 }
-            } 
-            // 5+ guys
-            else {
+            } else {
                 newAssign['Gib'] = rotated[4] || 'None';
                 newAssign.squadDedicated = (hereToday.length >= 6);
             }
 
-            // Save previous to history (only if there was a real previous shift)
+            // ALWAYS save the old shift to history (even same day)
             if (currentAssignments.date) {
                 history.push({...currentAssignments});
-                if (history.length > 30) history.shift();
+                if (history.length > 50) history.shift();  // keep more history
             }
 
             currentAssignments = newAssign;

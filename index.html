@@ -96,9 +96,11 @@
         }
 
         function render() {
+            // Current date
             const dateEl = document.getElementById('current-date');
             dateEl.textContent = currentAssignments.date ? 'Date: ' + currentAssignments.date : 'No shift yet';
 
+            // Current assignments
             const assignDiv = document.getElementById('assignments');
             assignDiv.innerHTML = '';
             
@@ -126,44 +128,43 @@
         function generateNextShift() {
             const hereToday = fullCrew.filter(guy => availability[guy]);
             if (hereToday.length === 0) {
-                alert("Nobody marked as here. Check the boxes.");
+                alert("Nobody marked as here. Check at least some boxes.");
                 return;
             }
 
             let newAssign = { date: getToday() };
 
-            // Build working order with rotation from last shift
+            // Build rotation order
             let prevOrder = [];
-            if (Object.keys(currentAssignments).length > 0 && currentAssignments.date) {
+            if (currentAssignments.date) {
                 trucks.forEach(t => {
                     if (currentAssignments[t] && currentAssignments[t] !== '—') prevOrder.push(currentAssignments[t]);
                 });
                 if (currentAssignments['Gib'] && currentAssignments['Gib'] !== 'None') prevOrder.push(currentAssignments['Gib']);
             }
 
-            let stillHereFromLast = prevOrder.filter(guy => hereToday.includes(guy));
-            let newGuys = hereToday.filter(guy => !stillHereFromLast.includes(guy));
-            let workingOrder = stillHereFromLast.concat(newGuys);
+            let stillHere = prevOrder.filter(guy => hereToday.includes(guy));
+            let newGuys = hereToday.filter(guy => !stillHere.includes(guy));
+            let workingOrder = stillHere.concat(newGuys);
 
-            // Rotate
             let rotated = workingOrder.length > 0 ? workingOrder.slice(1).concat(workingOrder[0]) : [];
 
-            // Assign the 4 trucks (will handle short staffing next)
+            // Assign trucks in order
             let idx = 0;
             trucks.forEach(truck => {
                 newAssign[truck] = rotated[idx] || '—';
                 idx++;
             });
 
-            // Short staffing rules (4 or fewer regular guys)
+            // Short staffing (4 or fewer regular guys)
             if (hereToday.length <= 4) {
                 newAssign['Gib'] = 'None';
                 newAssign.squadDedicated = false;
-                
-                // If exactly 4 guys: one guy covers both Engine 2 and AP1, Squad stays blank
+
                 if (hereToday.length === 4) {
-                    newAssign["AP1"] = newAssign["Engine 2"];  // same guy does both
-                    // Squad2/Tender2 stays as whatever was assigned or blank if not enough rotation
+                    // One guy covers both Engine 2 and AP1, Squad stays blank
+                    newAssign["AP1"] = newAssign["Engine 2"];
+                    // Squad2/Tender2 stays as assigned or blank
                 }
             } 
             // 5+ guys
@@ -172,8 +173,8 @@
                 newAssign.squadDedicated = (hereToday.length >= 6);
             }
 
-            // Save old shift to history
-            if (Object.keys(currentAssignments).length > 0 && currentAssignments.date) {
+            // Save previous to history (only if there was a real previous shift)
+            if (currentAssignments.date) {
                 history.push({...currentAssignments});
                 if (history.length > 30) history.shift();
             }

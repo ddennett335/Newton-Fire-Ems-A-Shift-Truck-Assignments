@@ -18,7 +18,7 @@
     </style>
 </head>
 <body>
-    <h1>Firehouse Truck Rotation - v5 debug</h1>
+    <h1>Firehouse Truck Rotation - v6 explicit</h1>
     <p><strong>Crew:</strong> Kevin Finley, Joshua Strotkamp, Trevor Yoder, Duaine Helms, Daniel Dennett, Dalton Beckett, Jordan Boston, Capt. Wald (no truck)</p>
 
     <div class="assignment">
@@ -121,21 +121,6 @@
             const gibP = document.createElement('p');
             gibP.innerHTML = `<strong>Gib (Guy in Back):</strong> ${gibGuy}`;
             assignDiv.appendChild(gibP);
-
-            // History render (now forced to show even if empty)
-            const histDiv = document.getElementById('history');
-            histDiv.innerHTML = history.length ? '' : '<p>No past shifts yet.</p>';
-            history.slice().reverse().forEach((entry, i) => {
-                const div = document.createElement('div');
-                div.className = 'assignment';
-                let html = `<strong>Shift ${history.length - i} - ${entry.date || '—'}</strong><br>`;
-                trucks.forEach(t => {
-                    html += `${t}: ${entry[t] || '—'}<br>`;
-                });
-                html += `Gib: ${entry['Gib'] || 'None'}`;
-                div.innerHTML = html;
-                histDiv.appendChild(div);
-            });
         }
 
         function generateNextShift() {
@@ -147,47 +132,41 @@
 
             let newAssign = { date: getToday() };
 
-            // Rotation order
-            let prevOrder = [];
-            if (currentAssignments.date) {
-                trucks.forEach(t => {
-                    if (currentAssignments[t] && currentAssignments[t] !== '—') prevOrder.push(currentAssignments[t]);
-                });
-                if (currentAssignments['Gib'] && currentAssignments['Gib'] !== 'None') prevOrder.push(currentAssignments['Gib']);
-            }
-
-            let stillHere = prevOrder.filter(guy => hereToday.includes(guy));
-            let newGuys = hereToday.filter(guy => !stillHere.includes(guy));
-            let workingOrder = stillHere.concat(newGuys);
-
-            let rotated = workingOrder.length > 0 ? workingOrder.slice(1).concat(workingOrder[0]) : [];
-
-            // Assign trucks
-            let idx = 0;
-            trucks.forEach(truck => {
-                newAssign[truck] = rotated[idx] || '—';
-                idx++;
-            });
-
-            // === EXPLICIT SHORT STAFFING FIX (exactly 4 guys) ===
+            // === 100% EXPLICIT 4-GUY MINIMUM STAFFING ===
             if (hereToday.length === 4) {
-                newAssign["AP1"] = newAssign["Engine 2"];   // same guy on both
-                newAssign["Squad2/Tender2"] = '—';          // force Squad blank
+                newAssign["Medic 2"] = hereToday[0];
+                newAssign["Engine 2"] = hereToday[1];
+                newAssign["AP1"] = hereToday[1];          // DOUBLE on Engine + AP1
+                newAssign["Squad2/Tender2"] = '—';        // blank
                 newAssign['Gib'] = 'None';
                 newAssign.squadDedicated = false;
             } 
-            // 5+ guys
-            else if (hereToday.length >= 5) {
+            // 5+ guys - normal rotation
+            else {
+                let prevOrder = [];
+                if (currentAssignments.date) {
+                    trucks.forEach(t => {
+                        if (currentAssignments[t] && currentAssignments[t] !== '—') prevOrder.push(currentAssignments[t]);
+                    });
+                    if (currentAssignments['Gib'] && currentAssignments['Gib'] !== 'None') prevOrder.push(currentAssignments['Gib']);
+                }
+
+                let stillHere = prevOrder.filter(guy => hereToday.includes(guy));
+                let newGuys = hereToday.filter(guy => !stillHere.includes(guy));
+                let workingOrder = stillHere.concat(newGuys);
+                let rotated = workingOrder.length > 0 ? workingOrder.slice(1).concat(workingOrder[0]) : [];
+
+                let idx = 0;
+                trucks.forEach(truck => {
+                    newAssign[truck] = rotated[idx] || '—';
+                    idx++;
+                });
+
                 newAssign['Gib'] = rotated[4] || 'None';
                 newAssign.squadDedicated = (hereToday.length >= 6);
-            } 
-            // fewer than 4 (extra safe)
-            else {
-                newAssign['Gib'] = 'None';
-                newAssign.squadDedicated = false;
             }
 
-            // ALWAYS save previous shift to history (even same day)
+            // Always save previous to history
             if (currentAssignments.date) {
                 history.push({...currentAssignments});
                 if (history.length > 50) history.shift();
